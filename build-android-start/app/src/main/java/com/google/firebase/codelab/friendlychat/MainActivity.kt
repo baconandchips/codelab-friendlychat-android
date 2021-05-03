@@ -96,7 +96,16 @@ class MainActivity : AppCompatActivity() {
         binding.messageEditText.addTextChangedListener(MyButtonObserver(binding.sendButton))
 
         // When the send button is clicked, send a text message
-        // TODO: implement
+        binding.sendButton.setOnClickListener {
+            val friendlyMessage = FriendlyMessage(
+                    binding.messageEditText.text.toString(),
+                getUserName(),
+                getPhotoUrl(),
+                null /* no image */
+            )
+            db.reference.child(MESSAGES_CHILD).push().setValue(friendlyMessage)
+            binding.messageEditText.setText("")
+        }
 
         // When the image button is clicked, launch the image picker
         binding.addMessageImageView.setOnClickListener {
