@@ -20,20 +20,31 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.firebase.ui.database.FirebaseRecyclerOptions
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.ktx.auth
 import com.google.firebase.codelab.friendlychat.databinding.ActivityMainBinding
+import com.google.firebase.codelab.friendlychat.model.FriendlyMessage
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.StorageReference
 
 class MainActivity : AppCompatActivity() {
     private lateinit var signInClient: GoogleSignInClient
     private lateinit var binding: ActivityMainBinding
     private lateinit var manager: LinearLayoutManager
+    // Firebase instance variables
+    private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseDatabase
+    private lateinit var adapter: FriendlyMessageAdapter
 
-    // TODO: implement Firebase instance variables
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +55,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Initialize Firebase Auth and check if the user is signed in
-        // TODO: implement
+        auth = Firebase.auth
+        if (auth.currentUser == null) {
+            // Not signed in, launch the Sign In activity
+            startActivity(Intent(this, SignInActivity::class.java))
+            finish()
+            return
+        }
 
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(getString(R.string.default_web_client_id))
@@ -53,7 +70,26 @@ class MainActivity : AppCompatActivity() {
         signInClient = GoogleSignIn.getClient(this, gso)
 
         // Initialize Realtime Database and FirebaseRecyclerAdapter
-        // TODO: implement
+        db = Firebase.database
+        val messagesRef = db.reference.child(MESSAGES_CHILD)
+
+        // The FirebaseRecyclerAdapter class and options come from the FirebaseUI library
+        // See: https://github.com/firebase/FirebaseUI-Android
+        val options = FirebaseRecyclerOptions.Builder<FriendlyMessage>()
+            .setQuery(messagesRef, FriendlyMessage::class.java)
+            .build()
+        adapter = FriendlyMessageAdapter(options, getUserName())
+        binding.progressBar.visibility = ProgressBar.INVISIBLE
+        manager = LinearLayoutManager(this)
+        manager.stackFromEnd = true
+        binding.messageRecyclerView.layoutManager = manager
+        binding.messageRecyclerView.adapter = adapter
+
+        // Scroll down when a new message arrives
+        // See MyScrollToBottomObserver for details
+        adapter.registerAdapterDataObserver(
+            MyScrollToBottomObserver(binding.messageRecyclerView, adapter, manager)
+        )
 
         // Disable the send button when there's no text in the input field
         // See MyButtonObserver for details
@@ -71,18 +107,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun getPhotoUrl(): String? {
+        val user = auth.currentUser
+        return user?.photoUrl?.toString()
+    }
+
+    private fun getUserName(): String? {
+        val user = auth.currentUser
+        return if (user != null) {
+            user.displayName
+        } else ANONYMOUS
+    }
+
     public override fun onStart() {
         super.onStart()
         // Check if user is signed in.
-        // TODO: implement
+        if (auth.currentUser == null) {
+            // Not signed in, launch the Sign In activity
+            startActivity(Intent(this, SignInActivity::class.java))
+            finish()
+            return
+        }
     }
 
     public override fun onPause() {
+        adapter.stopListening()
         super.onPause()
     }
 
     public override fun onResume() {
         super.onResume()
+        adapter.startListening()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -112,7 +167,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun signOut() {
-        // TODO: implement
+        auth.signOut()
+        signInClient.signOut()
+        startActivity(Intent(this, SignInActivity::class.java))
+        finish()
     }
 
     companion object {
